@@ -32,3 +32,14 @@ Evaluation evidence:
 - ambiguous/manual: `0x484baa4b20b084d883cab5c0b9d7448a89c9ee972d13bbcec4830bd4fe49eb60`
 
 Explorer: https://explorer-studio.genlayer.com/address/0x95D3c923cb1f5Ef5b298441edF750Ab83b3C57a1
+
+## Current v2.1 deployment
+
+- Source commit: `b390dfa30571301f33931f673eeb14b801f37c64`
+- Contract: `0x8b49fF0a0E3C195c913f9a12Ae7Efc2FCbF1f15f`
+- Deployment transaction: `0xbe4b85e45748c633d805739b4b6523f14932a92203a1ae93b171b677df6ac504`
+- Result: `FINALIZED / MAJORITY_AGREE / SUCCESS`
+- Exact local/deployed SHA-256: `86762659bac2153ab3941febe5f4b838061bd93b6c8593e7e350babc650f067f`
+- Source retrieval: exact byte match
+- Full evidence: `docs/V2_1_HARDENING.md`
+- Explorer: https://explorer-studio.genlayer.com/address/0x8b49fF0a0E3C195c913f9a12Ae7Efc2FCbF1f15f

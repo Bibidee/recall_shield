@@ -1,4 +1,4 @@
-# v2.0.0
+# v2.1.0
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 """RecallShield: consensus-backed recall adjudication with native GEN escrow."""
 
@@ -244,6 +244,10 @@ def valid_analysis(value) -> bool:
         for key in ("product_match", "recall_match", "ownership_match"):
             strict_choice(value.get(key), ("yes", "no", "unclear"))
         strict_confidence(value.get("confidence"))
+        strict_choice(value.get("quality"), ("strong", "adequate", "weak"))
+        summary = value.get("summary")
+        if not isinstance(summary, str) or len(clean_text(summary)) > MAX_SUMMARY:
+            return False
     except (TypeError, ValueError): return False
     return True
 
@@ -432,8 +436,9 @@ class RecallShield(gl.Contract):
         if int(gl.message.value) != int(case.claim_bond): raise gl.vm.UserError(f"{EXPECTED} Exact claimant bond required")
         claimant_key = case_id + "|" + self._sender().lower()
         if self.claimant_cases.get(claimant_key) is not None: raise gl.vm.UserError(f"{EXPECTED} One claim per address per case")
-        proof_key, image_key = evidence_key(proof_url), evidence_key(product_image_url)
-        if self.used_proofs.get(proof_key) is not None or self.used_images.get(image_key) is not None: raise gl.vm.UserError(f"{EXPECTED} Evidence already used")
+        proof_key = case_id + "|" + evidence_key(proof_url)
+        image_key = case_id + "|" + evidence_key(product_image_url)
+        if self.used_proofs.get(proof_key) is not None or self.used_images.get(image_key) is not None: raise gl.vm.UserError(f"{EXPECTED} Evidence already used in this case")
         allocation = int(case.payout_per_claim) + int(case.reserve_per_claim)
         liability = allocation + int(case.claim_bond)
         new_funds = int(case.funds_held) + int(gl.message.value)
@@ -505,7 +510,7 @@ class RecallShield(gl.Contract):
 
     @gl.public.write
     def settle_auto_claim(self, claim_id: str) -> None:
-        self._active(); claim = self._claim(claim_id); case = self._case(str(claim.case_id))
+        claim = self._claim(claim_id); case = self._case(str(claim.case_id))
         if claim.status != CLAIM_EVALUATED: raise gl.vm.UserError(f"{EXPECTED} Claim is not auto-settleable")
         if claim.verdict == ELIGIBLE: self._settle(case, claim, int(case.payout_per_claim), "")
         elif claim.verdict == INELIGIBLE: self._settle(case, claim, 0, "")
@@ -513,23 +518,25 @@ class RecallShield(gl.Contract):
 
     @gl.public.write
     def withdraw_claim(self, claim_id: str) -> None:
-        """Let a claimant release a still-submitted liability after failed consensus."""
-        self._active(); claim = self._claim(claim_id); case = self._case(str(claim.case_id))
+        """Release a submitted or manual-review claim without an allocation payout."""
+        claim = self._claim(claim_id); case = self._case(str(claim.case_id))
         if str(claim.claimant) != self._sender(): raise gl.vm.UserError(f"{EXPECTED} Claimant only")
-        if claim.status != CLAIM_SUBMITTED: raise gl.vm.UserError(f"{EXPECTED} Only a submitted claim can be withdrawn")
+        if claim.status not in (CLAIM_SUBMITTED, CLAIM_MANUAL): raise gl.vm.UserError(f"{EXPECTED} Only a submitted or manual-review claim can be withdrawn")
+        was_manual = claim.status == CLAIM_MANUAL
         claim.status, claim.verdict = CLAIM_EVALUATED, WITHDRAWN
-        self._settle(case, claim, 0, "Claimant withdrew before a consensus verdict.")
+        note = "Claimant exited manual review; allocation released to case owner." if was_manual else "Claimant withdrew before a consensus verdict."
+        self._settle(case, claim, 0, note)
 
     @gl.public.write
     def settle_manual_claim(self, claim_id: str, claimant_bps: u256, note: str) -> None:
-        self._active(); claim = self._claim(claim_id); case = self._case(str(claim.case_id)); self._case_owner(case)
+        claim = self._claim(claim_id); case = self._case(str(claim.case_id)); self._case_owner(case)
         note = validate_text(note, "note", MAX_NOTE)
         if claim.status != CLAIM_MANUAL or int(claimant_bps) > BPS: raise gl.vm.UserError(f"{EXPECTED} Invalid manual settlement")
         self._settle(case, claim, (int(claim.allocation) * int(claimant_bps)) // BPS, note)
 
     @gl.public.write
     def finalize_case(self, case_id: str) -> None:
-        self._active(); case = self._case(case_id); self._case_owner(case)
+        case = self._case(case_id); self._case_owner(case)
         if case.status != CASE_CLAIMS_CLOSED: raise gl.vm.UserError(f"{EXPECTED} Claim intake must be closed first")
         if int(case.outstanding_liability) != 0 or int(case.claims_terminal) != int(case.claims_submitted): raise gl.vm.UserError(f"{EXPECTED} Unresolved claim liabilities remain")
         case.status, case.closed_at = CASE_CLOSED, u256(transaction_timestamp())
@@ -537,7 +544,7 @@ class RecallShield(gl.Contract):
 
     @gl.public.write
     def reclaim_surplus(self, case_id: str) -> None:
-        self._active(); case = self._case(case_id); self._case_owner(case)
+        case = self._case(case_id); self._case_owner(case)
         if case.status != CASE_CLAIMS_CLOSED: raise gl.vm.UserError(f"{EXPECTED} Surplus reclaim requires closed intake")
         surplus = int(case.funds_held) - int(case.outstanding_liability)
         if surplus <= 0: raise gl.vm.UserError(f"{EXPECTED} No unreserved surplus")
@@ -548,7 +555,7 @@ class RecallShield(gl.Contract):
 
     @gl.public.write
     def cancel_unused_case(self, case_id: str) -> None:
-        self._active(); case = self._case(case_id); self._case_owner(case)
+        case = self._case(case_id); self._case_owner(case)
         if int(case.claims_submitted) != 0 or case.status not in (CASE_OPEN, CASE_PAUSED, CASE_CLAIMS_CLOSED): raise gl.vm.UserError(f"{EXPECTED} Only an unused non-final case can be cancelled")
         refund = int(case.funds_held)
         if refund <= 0: raise gl.vm.UserError(f"{EXPECTED} No escrow to refund")
@@ -559,7 +566,7 @@ class RecallShield(gl.Contract):
 
     @gl.public.write
     def reclaim_closed_case(self, case_id: str) -> None:
-        self._active(); case = self._case(case_id); self._case_owner(case)
+        case = self._case(case_id); self._case_owner(case)
         if case.status != CASE_CLOSED or int(case.outstanding_liability) != 0: raise gl.vm.UserError(f"{EXPECTED} Final liability-free case required")
         refund = int(case.funds_held)
         if refund <= 0: raise gl.vm.UserError(f"{EXPECTED} No escrow to reclaim")
@@ -604,7 +611,7 @@ class RecallShield(gl.Contract):
 
     @gl.public.view
     def get_info(self) -> dict:
-        return {"name": "RecallShield", "version": "2.0.0", "owner": self.owner.as_hex, "paused": bool(self.paused),
+        return {"name": "RecallShield", "version": "2.1.0", "owner": self.owner.as_hex, "paused": bool(self.paused),
             "case_count": int(self.case_count), "claim_count": int(self.claim_count), "max_cases": MAX_CASES,
             "max_total_claims": MAX_TOTAL_CLAIMS, "max_claims_per_case": MAX_CLAIMS_PER_CASE,
             "total_claimant_paid": str(self.total_claimant_paid), "total_owner_released": str(self.total_owner_released)}

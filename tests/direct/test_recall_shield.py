@@ -224,7 +224,7 @@ def test_claimant_can_withdraw_retryable_claim_and_release_liability(direct_vm, 
     assert claim["status"] == "settled" and claim["verdict"] == "withdrawn"
     assert claim["claimant_payout"] == str(ONE//10)
     assert case["outstanding_liability"] == "0"
-    with direct_vm.expect_revert("submitted claim"): c.withdraw_claim("claim-1")
+    with direct_vm.expect_revert("submitted or manual-review claim"): c.withdraw_claim("claim-1")
 
 
 def test_surplus_reclaim_preserves_claim_liability(direct_vm, direct_deploy):
