@@ -3,10 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "populate:studionet": "node scripts/populate_studionet.mjs",
-    "populate:extended": "node scripts/populate_extended_studionet.mjs",
-    "complete:claim": "node scripts/complete_claim_lifecycle.mjs",
-    "complete:operations": "node scripts/complete_operations_case.mjs",
+    "deploy:studionet": "node scripts/deploy_studionet.mjs",
+    "verify:studionet": "node scripts/studionet_verify.mjs",
+    "source:match": "node scripts/source_match.mjs",
     "status:tx": "node scripts/transaction_status.mjs"
   },
   "dependencies": {

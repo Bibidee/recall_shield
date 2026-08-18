@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 artifacts/
 node_modules/
+.reference-audit/
