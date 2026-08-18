@@ -41,6 +41,57 @@ def test_global_pause_allows_already_evaluated_auto_settlement(direct_vm, direct
     assert claim["claimant_payout"] == str(ONE + ONE // 10)
 
 
+def test_global_pause_blocks_each_risk_increasing_operation(direct_vm, direct_deploy, direct_alice):
+    c = deploy(direct_vm, direct_deploy)
+    create(direct_vm, c)
+    submit(direct_vm, c)
+    c.set_paused(True)
+
+    with direct_vm.expect_revert("Contract is paused"):
+        create(direct_vm, c, case_id="case-2")
+    direct_vm.value = ONE
+    try:
+        with direct_vm.expect_revert("Contract is paused"):
+            c.top_up_case("case-1")
+    finally:
+        direct_vm.value = 0
+    with direct_vm.expect_revert("Contract is paused"):
+        c.set_case_status("case-1", "paused")
+    with direct_vm.prank(direct_alice):
+        with direct_vm.expect_revert("Contract is paused"):
+            submit(direct_vm, c, "claim-2", "case-1", "https://proof.example.com/2", "https://images.example.com/2.png")
+    with direct_vm.expect_revert("Contract is paused"):
+        c.evaluate_claim("claim-1")
+
+
+def test_global_pause_allows_manual_settlement_and_case_exits(direct_vm, direct_deploy):
+    c = deploy(direct_vm, direct_deploy)
+    create(direct_vm, c, case_id="manual")
+    submit(direct_vm, c, "manual-claim", "manual")
+    mock_result(direct_vm, ownership="unclear", confidence=50)
+    c.evaluate_claim("manual-claim")
+
+    create(direct_vm, c, case_id="surplus")
+    c.set_case_status("surplus", "claims_closed")
+    create(direct_vm, c, case_id="final-reclaim")
+    c.set_case_status("final-reclaim", "claims_closed")
+    create(direct_vm, c, case_id="cancel")
+    c.set_paused(True)
+
+    c.settle_manual_claim("manual-claim", 0, "Release allocation during emergency pause.")
+    c.reclaim_surplus("surplus")
+    c.finalize_case("surplus")
+    c.finalize_case("final-reclaim")
+    c.reclaim_closed_case("final-reclaim")
+    c.cancel_unused_case("cancel")
+
+    assert c.get_claim("manual-claim")["status"] == "settled"
+    for case_id in ("surplus", "final-reclaim", "cancel"):
+        case = c.get_case(case_id)
+        assert case["funds_held"] == "0"
+        assert case["outstanding_liability"] == "0"
+
+
 def test_manual_review_claimant_can_exit_and_only_recover_bond(direct_vm, direct_deploy):
     c = deploy(direct_vm, direct_deploy)
     create(direct_vm, c)
