@@ -110,12 +110,18 @@ for (const scenario of scenarios) {
   await waitState(`${caseId} created`, async () => (await read("get_case", [caseId])).status === "open");
   record = await write("submit_claim", [claimId, caseId, scenario.proof, scenario.image, scenario.purchase, scenario.statement], bond);
   if (!accepted(record)) throw new Error(`Claim submission failed: ${json(record)}`);
-  await waitState(`${claimId} submitted`, async () => (await read("get_claim", [claimId])).status === "submitted");
+  const submittedClaim = await waitState(`${claimId} submitted`, async () => {
+    const value = await read("get_claim", [claimId]); return value.status === "submitted" ? value : null;
+  });
+  const submittedCase = await read("get_case", [caseId]);
   record = await write("evaluate_claim", [claimId]);
   if (!accepted(record)) {
     const unchanged = await read("get_claim", [claimId]);
+    const unchangedCase = await read("get_case", [caseId]);
     console.log(json({ scenario: scenario.label, outcome: "NO_VERDICT", transaction: record, state: unchanged }));
     if (unchanged.status !== "submitted" || BigInt(unchanged.evaluated_at) !== 0n) throw new Error("Failed evaluation mutated claim state");
+    if (BigInt(unchanged.claimant_payout) !== BigInt(submittedClaim.claimant_payout) || BigInt(unchanged.owner_release) !== BigInt(submittedClaim.owner_release)) throw new Error("Failed evaluation changed payout state");
+    if (BigInt(unchangedCase.outstanding_liability) !== BigInt(submittedCase.outstanding_liability) || unchangedCase.claims_terminal !== submittedCase.claims_terminal) throw new Error("Failed evaluation changed case liability or terminal counter");
     const withdrawal = await write("withdraw_claim", [claimId]);
     if (!accepted(withdrawal)) throw new Error(`Withdrawal failed: ${json(withdrawal)}`);
   } else {

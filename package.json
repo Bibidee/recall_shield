@@ -5,6 +5,7 @@
   "scripts": {
     "deploy:studionet": "node scripts/deploy_studionet.mjs",
     "verify:studionet": "node scripts/studionet_verify.mjs",
+    "verify:v21-liveness": "node scripts/studionet_v21_liveness.mjs",
     "source:match": "node scripts/source_match.mjs",
     "status:tx": "node scripts/transaction_status.mjs"
   },
