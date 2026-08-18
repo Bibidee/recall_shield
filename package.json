@@ -1,0 +1,17 @@
+{
+  "name": "recall-shield",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "populate:studionet": "node scripts/populate_studionet.mjs",
+    "populate:extended": "node scripts/populate_extended_studionet.mjs",
+    "complete:claim": "node scripts/complete_claim_lifecycle.mjs",
+    "complete:operations": "node scripts/complete_operations_case.mjs",
+    "status:tx": "node scripts/transaction_status.mjs"
+  },
+  "dependencies": {
+    "ethers": "^6.15.0",
+    "genlayer-js": "^1.1.8",
+    "viem": "^2.37.2"
+  }
+}
